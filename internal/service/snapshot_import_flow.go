@@ -19,9 +19,11 @@ func (f *SnapshotImportFlow) Process(key string, fail bool) error {
 	if !ok {
 		return errors.New("lease busy")
 	}
+	// Release on every exit path, including failure, so a retry of the
+	// same snapshot is not told the lease is still busy.
+	defer f.state.Release(key, token)
 	if fail {
 		return errors.New("operation failed")
 	}
-	defer f.state.Release(key, token)
 	return nil
 }

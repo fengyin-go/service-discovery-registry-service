@@ -30,7 +30,9 @@ func (s *SnapshotImportLeaseState) Release(key string, token uint64) bool {
 	if _, ok := s.active[key]; !ok {
 		return false
 	}
-	s.active[key] = 0
+	// Remove the entry entirely; merely zeroing it leaves the key present,
+	// so Acquire would still report the lease as busy on a retry.
+	delete(s.active, key)
 	return true
 }
 
