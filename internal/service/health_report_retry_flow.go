@@ -1,6 +1,10 @@
 package service
 
-import "serviceregistry/internal/store"
+import (
+	"errors"
+
+	"serviceregistry/internal/store"
+)
 
 type HealthReportRetryFlow struct {
 	state *store.HealthReportRetryRetryState
@@ -11,12 +15,14 @@ func NewHealthReportRetryFlow(state *store.HealthReportRetryRetryState) *HealthR
 }
 
 func (f *HealthReportRetryFlow) Execute() error {
-	var last error
-	for attempt := 0; attempt < 2; attempt++ {
-		last = f.state.Next()
-		if last == nil {
-			return nil
-		}
+	err := f.state.Next()
+	if err == nil {
+		return nil
 	}
-	return last
+	// 仅临时错误才再试一次；不可重试的拒绝直接返回，保留原始错误类别。
+	var rf *store.RetryFailure
+	if errors.As(err, &rf) && rf.Temporary {
+		return f.state.Next()
+	}
+	return err
 }
