@@ -17,9 +17,10 @@ func (f *ProbeLeaseFlow) Process(key string, fail bool) error {
 	if !ok {
 		return errors.New("lease busy")
 	}
+	// 先注册释放，确保失败分支也会归还租约，否则同一实例再探测会一直被占用。
+	defer f.state.Release(key, token)
 	if fail {
 		return errors.New("operation failed")
 	}
-	defer f.state.Release(key, token)
 	return nil
 }
