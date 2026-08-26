@@ -17,6 +17,11 @@ func (f *EventPublishRetryFlow) Execute() error {
 		if last == nil {
 			return nil
 		}
+		// 永久拒绝不可重试：立即返回，绝不进入下一轮发布。
+		// 只有临时错误才允许重试制造短暂繁忙。
+		if !store.IsTemporaryError(last) {
+			return last
+		}
 	}
 	return last
 }

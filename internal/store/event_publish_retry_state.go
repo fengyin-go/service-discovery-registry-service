@@ -1,7 +1,5 @@
 package store
 
-import "errors"
-
 type RetryFailure struct {
 	Temporary bool
 	Message   string
@@ -27,7 +25,10 @@ func (s *EventPublishRetryRetryState) Next() error {
 		s.steps = s.steps[1:]
 	}
 	if err != nil {
-		return errors.New(err.Error())
+		// 保留原始错误类型，使调用方能据 Temporary 区分永久错误与临时错误。
+		// 此前用 errors.New(err.Error()) 重写会丢失 *RetryFailure 类型，
+		// 导致永久拒绝被误当作可重试错误。
+		return err
 	}
 	s.commits++
 	return nil
@@ -35,3 +36,10 @@ func (s *EventPublishRetryRetryState) Next() error {
 
 func (s *EventPublishRetryRetryState) Attempts() int { return s.attempts }
 func (s *EventPublishRetryRetryState) Commits() int  { return s.commits }
+
+// IsTemporaryError 报告 err 是否为可重试的临时错误。
+// 永久拒绝（Temporary=false）与未知错误均不可重试。
+func IsTemporaryError(err error) bool {
+	f, ok := err.(*RetryFailure)
+	return ok && f.Temporary
+}
