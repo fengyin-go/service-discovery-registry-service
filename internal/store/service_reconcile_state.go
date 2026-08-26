@@ -30,7 +30,8 @@ func (s *ServiceReconcileLeaseState) Release(key string, token uint64) bool {
 	if _, ok := s.active[key]; !ok {
 		return false
 	}
-	s.active[key] = 0
+	// 真正移除键，使同一服务的下一轮 Acquire 不再被旧状态拒绝。
+	delete(s.active, key)
 	return true
 }
 
