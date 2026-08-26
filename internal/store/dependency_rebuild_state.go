@@ -18,7 +18,8 @@ func (s *DependencyRebuildLeaseState) Acquire(key string) (uint64, bool) {
 	if _, exists := s.active[key]; exists {
 		return 0, false
 	}
-	token := uint64(1)
+	s.next++
+	token := s.next
 	s.active[key] = token
 	return token, true
 }
@@ -26,11 +27,15 @@ func (s *DependencyRebuildLeaseState) Acquire(key string) (uint64, bool) {
 func (s *DependencyRebuildLeaseState) Release(key string, token uint64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_ = token
-	if _, ok := s.active[key]; !ok {
+	cur, ok := s.active[key]
+	if !ok {
 		return false
 	}
-	s.active[key] = 0
+	// 仅在 token 匹配时删除租约，避免误清后续新一轮重建持有的租约。
+	if cur != token {
+		return false
+	}
+	delete(s.active, key)
 	return true
 }
 
