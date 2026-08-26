@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>服务注册中心控制台</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --panel-2: #273449;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --up: #34d399;
+      --down: #f87171;
+      --border: #334155;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+    header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; background: var(--panel); border-bottom: 1px solid var(--border); }
+    header h1 { margin: 0; font-size: 18px; }
+    .stats { display: flex; gap: 16px; }
+    .stat { background: var(--panel-2); padding: 8px 16px; border-radius: 8px; text-align: center; }
+    .stat b { display: block; font-size: 20px; color: var(--accent); }
+    .stat span { font-size: 12px; color: var(--muted); }
+    .wrap { display: grid; grid-template-columns: 320px 1fr; gap: 16px; padding: 20px 24px; }
+    .card { background: var(--panel); border-radius: 10px; padding: 16px; }
+    .card h2 { margin: 0 0 12px; font-size: 15px; color: var(--muted); font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 500; }
+    tr { cursor: pointer; }
+    tr:hover { background: var(--panel-2); }
+    .pill { padding: 2px 8px; border-radius: 12px; font-size: 11px; }
+    .up { background: rgba(52,211,153,.15); color: var(--up); }
+    .down { background: rgba(248,113,113,.15); color: var(--down); }
+    button { padding: 8px 14px; border: none; border-radius: 6px; background: var(--accent); color: #0f172a; font-weight: 600; cursor: pointer; }
+    input, select { width: 100%; padding: 8px; margin-bottom: 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    #log { font-family: monospace; font-size: 12px; color: var(--muted); min-height: 40px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🔭 服务注册中心控制台</h1>
+    <div class="stats" id="stats"></div>
+  </header>
+  <div class="wrap">
+    <div>
+      <div class="card">
+        <h2>注册服务</h2>
+        <input id="svc-name" placeholder="服务名，如 user-svc">
+        <input id="svc-version" placeholder="版本，如 1.0.0">
+        <input id="svc-owner" placeholder="负责人">
+        <button onclick="createService()">注册服务</button>
+      </div>
+      <div class="card">
+        <h2>注册实例</h2>
+        <select id="inst-svc"></select>
+        <input id="inst-host" placeholder="主机，如 10.0.0.1">
+        <input id="inst-port" placeholder="端口，如 8080" type="number">
+        <div class="row">
+          <input id="inst-region" placeholder="区域 region">
+          <input id="inst-zone" placeholder="可用区 zone">
+        </div>
+        <button onclick="registerInstance()">注册实例</button>
+      </div>
+      <div class="card">
+        <h2>操作日志</h2>
+        <div id="log">就绪。</div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <h2>服务列表</h2>
+        <table id="svc-table">
+          <thead><tr><th>名称</th><th>版本</th><th>状态</th><th>负责人</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h2 id="inst-title">实例列表</h2>
+        <table id="inst-table">
+          <thead><tr><th>地址</th><th>权重</th><th>状态</th><th>区域</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <script>
+    async function api(path, opts) {
+      const res = await fetch(path, opts);
+      const j = await res.json();
+      if (j.code !== 0) { log('错误: ' + j.message); return null; }
+      return j.data;
+    }
+    function log(msg) { document.getElementById('log').textContent = new Date().toLocaleTimeString() + ' ' + msg; }
+
+    async function loadStats() {
+      const s = await api('/api/stats/registry');
+      if (!s) return;
+      document.getElementById('stats').innerHTML =
+        `<div class="stat"><b>${s.total_services}</b><span>服务</span></div>` +
+        `<div class="stat"><b>${s.total_instances}</b><span>实例</span></div>` +
+        `<div class="stat"><b>${Math.round(s.healthy_ratio * 100)}%</b><span>健康率</span></div>`;
+    }
+
+    async function loadServices() {
+      const page = await api('/api/services?size=100');
+      if (!page) return;
+      const rows = page.items || [];
+      document.querySelector('#svc-table tbody').innerHTML = rows.map(sv =>
+        `<tr onclick="selectService('${sv.id}')">
+          <td>${sv.name}</td><td>${sv.version}</td>
+          <td><span class="pill ${sv.status}">${sv.status}</span></td><td>${sv.owner || '-'}</td>
+        </tr>`).join('');
+      document.getElementById('inst-svc').innerHTML = rows.map(sv =>
+        `<option value="${sv.id}">${sv.name}@${sv.version}</option>`).join('');
+    }
+
+    async function selectService(id) {
+      const page = await api('/api/instances?service_id=' + id + '&size=100');
+      if (!page) return;
+      const rows = page.items || [];
+      document.getElementById('inst-title').textContent = '实例列表（服务 ' + id.slice(0,6) + '…）';
+      document.querySelector('#inst-table tbody').innerHTML = rows.map(i =>
+        `<tr><td>${i.host}:${i.port}</td><td>${i.weight}</td>
+         <td><span class="pill ${i.status}">${i.status}</span></td><td>${i.region || '-'}</td></tr>`).join('');
+    }
+
+    async function createService() {
+      const name = document.getElementById('svc-name').value.trim();
+      const version = document.getElementById('svc-version').value.trim();
+      const owner = document.getElementById('svc-owner').value.trim();
+      if (!name || !version) { log('请填写服务名与版本'); return; }
+      const sv = await api('/api/services', { method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ name, version, owner }) });
+      if (sv) { log('服务已注册: ' + sv.name + '@' + sv.version); loadServices(); loadStats(); }
+    }
+
+    async function registerInstance() {
+      const service_id = document.getElementById('inst-svc').value;
+      const host = document.getElementById('inst-host').value.trim();
+      const port = parseInt(document.getElementById('inst-port').value, 10);
+      const region = document.getElementById('inst-region').value.trim();
+      const zone = document.getElementById('inst-zone').value.trim();
+      if (!service_id || !host || !port) { log('请填写实例信息'); return; }
+      const inst = await api('/api/instances', { method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ service_id, host, port, region, zone }) });
+      if (inst) { log('实例已注册: ' + inst.host + ':' + inst.port); selectService(service_id); loadStats(); }
+    }
+
+    loadStats();
+    loadServices();
+  </script>
+</body>
+</html>
