@@ -10,7 +10,7 @@ func (s *EventExportStream) Start(items []string, failAt int) (<-chan string, <-
 	out := make(chan string)
 	errs := make(chan error, 1)
 	go func() {
-
+		defer close(out)
 		defer close(errs)
 		for index, item := range items {
 			if index == failAt {
